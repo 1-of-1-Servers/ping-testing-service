@@ -64,17 +64,25 @@ fi
 APP_DIR="/opt/1of1ping"
 mkdir -p "$APP_DIR"
 
-# Check if the Go source file exists in the current directory.
+# Check if the required Go source files exist in the current directory.
 SOURCE_FILE="./main.go"
+MOD_FILE="./go.mod"
+
 if [ ! -f "$SOURCE_FILE" ]; then
-  echo "Error: $SOURCE_FILE not found. Please ensure your Go source file is in the current directory."
+  echo "Error: $SOURCE_FILE not found. Please ensure your main.go file is in the current directory."
   exit 1
 fi
 
-echo "Copying Go application source code from 1of1ping.go to $APP_DIR/main.go..."
-cp "$SOURCE_FILE" "$APP_DIR/main.go"
+if [ ! -f "$MOD_FILE" ]; then
+  echo "Error: $MOD_FILE not found. Please ensure your go.mod file is in the current directory."
+  exit 1
+fi
 
-# Substitute the placeholder {{APP_PORT}} with the actual port.
+echo "Copying Go application source files to $APP_DIR..."
+cp "$SOURCE_FILE" "$APP_DIR/main.go"
+cp "$MOD_FILE" "$APP_DIR/go.mod"
+
+# Substitute the placeholder {{APP_PORT}} in main.go with the actual port.
 sed -i "s/{{APP_PORT}}/${APP_PORT}/g" "$APP_DIR/main.go"
 
 # --- Build the Go application ---
