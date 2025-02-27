@@ -14,12 +14,7 @@ if [ -z "$DOMAIN" ]; then
   exit 1
 fi
 
-# --- Ask user for port with default value 3000 ---
-read -p "Enter the port for the Go server [3000]: " APP_PORT
-APP_PORT=${APP_PORT:-3000}
-
 echo "Using domain: $DOMAIN"
-echo "Using port: $APP_PORT"
 
 # --- Update package lists ---
 echo "Updating package lists..."
@@ -39,12 +34,19 @@ else
   echo "Caddy is already installed."
 fi
 
-# --- Configure Caddy as a reverse proxy ---
+# --- Configure Caddy with a ping endpoint ---
 CADDYFILE="/etc/caddy/Caddyfile"
-echo "Configuring Caddy to reverse proxy from $DOMAIN to localhost:$APP_PORT..."
+echo "Configuring Caddy to serve a ping endpoint on $DOMAIN..."
 cat > "$CADDYFILE" <<EOF
 $DOMAIN {
-    reverse_proxy localhost:$APP_PORT
+    handle /ping {
+        header {
+            Content-Type "text/plain"
+            Cache-Control "no-store"
+            Access-Control-Allow-Origin "*"
+        }
+        respond "pong"
+    }
 }
 EOF
 
@@ -52,74 +54,5 @@ EOF
 echo "Reloading Caddy..."
 systemctl reload caddy
 
-# --- Install Go if not already installed ---
-if ! command -v go &>/dev/null; then
-  echo "Installing Go..."
-  apt install -y golang
-else
-  echo "Go is already installed."
-fi
-
-# --- Set up the Go application ---
-APP_DIR="/opt/1of1ping"
-mkdir -p "$APP_DIR"
-
-# Check if the required Go source files exist in the current directory.
-SOURCE_FILE="./main.go"
-MOD_FILE="./go.mod"
-
-if [ ! -f "$SOURCE_FILE" ]; then
-  echo "Error: $SOURCE_FILE not found. Please ensure your main.go file is in the current directory."
-  exit 1
-fi
-
-if [ ! -f "$MOD_FILE" ]; then
-  echo "Error: $MOD_FILE not found. Please ensure your go.mod file is in the current directory."
-  exit 1
-fi
-
-echo "Copying Go application source files to $APP_DIR..."
-cp "$SOURCE_FILE" "$APP_DIR/main.go"
-cp "$MOD_FILE" "$APP_DIR/go.mod"
-
-# Substitute the placeholder {{APP_PORT}} in main.go with the actual port.
-sed -i "s/{{APP_PORT}}/${APP_PORT}/g" "$APP_DIR/main.go"
-
-# --- Build the Go application ---
-echo "Compiling the Go application..."
-cd "$APP_DIR"
-go build -o 1of1ping
-
-# Move the compiled binary to /usr/local/bin
-echo "Installing the Go binary to /usr/local/bin..."
-mv 1of1ping /usr/local/bin/1of1ping
-
-# --- Create a systemd service for the Go application ---
-SERVICE_FILE="/etc/systemd/system/1of1ping.service"
-echo "Creating systemd service file at $SERVICE_FILE..."
-cat > "$SERVICE_FILE" <<EOF
-[Unit]
-Description=Go Ping Server (1of1ping)
-After=network.target
-
-[Service]
-ExecStart=/usr/local/bin/1of1ping
-Restart=always
-User=root
-WorkingDirectory=$APP_DIR
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# Reload systemd configuration, enable and start the service.
-echo "Reloading systemd daemon..."
-systemctl daemon-reload
-
-echo "Enabling and starting the 1of1ping service..."
-systemctl enable 1of1ping
-systemctl start 1of1ping
-
 echo "Installation complete."
-echo "Caddy is configured for domain $DOMAIN and reverse proxies to localhost:$APP_PORT."
-echo "The Go ping server (1of1ping) is running as a systemd service."
+echo "Caddy is now configured for domain $DOMAIN with a ping endpoint at https://$DOMAIN/ping"
